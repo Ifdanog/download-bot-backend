@@ -51,7 +51,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
-const youtubedlExec = require("../frontend/node_modules/youtube-dl-exec/src");
+const youtubedlExec = require('youtube-dl-exec');
 
 const SYSTEM_YTDLP_PATH = process.env.YTDLP_PATH || null; // e.g. "/opt/homebrew/bin/yt-dlp"
 const youtubedl = SYSTEM_YTDLP_PATH ? youtubedlExec.create(SYSTEM_YTDLP_PATH) : youtubedlExec;
