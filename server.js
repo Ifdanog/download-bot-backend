@@ -53,7 +53,7 @@ const express = require("express");
 const cors = require("cors");
 const youtubedlExec = require('youtube-dl-exec');
 
-const SYSTEM_YTDLP_PATH = process.env.YTDLP_PATH || null; // e.g. "/opt/homebrew/bin/yt-dlp"
+const SYSTEM_YTDLP_PATH = "/opt/homebrew/bin/yt-dlp" || null; // e.g. "/opt/homebrew/bin/yt-dlp"
 const youtubedl = SYSTEM_YTDLP_PATH ? youtubedlExec.create(SYSTEM_YTDLP_PATH) : youtubedlExec;
 
 const PORT = process.env.PORT || 3000;
