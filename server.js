@@ -75,6 +75,20 @@ const youtubedl = YTDLP_PATH ? youtubedlExec.create(YTDLP_PATH) : youtubedlExec;
 // changes. Applied consistently across every yt-dlp call.
 const EXTRACTOR_ARGS = ["youtube:player_client=tv"];
 
+// Optional path to a cookies.txt file (Netscape format) exported from your
+// own logged-in browser session. Cloud/datacenter IPs (Render, AWS, etc.)
+// are frequently challenged by YouTube's bot check ("Sign in to confirm
+// you're not a bot"), and authenticated cookies are the standard yt-dlp
+// workaround for that. See .env.example for how to generate one.
+const COOKIES_PATH = process.env.YTDLP_COOKIES_PATH || null;
+if (COOKIES_PATH && !fs.existsSync(COOKIES_PATH)) {
+  console.warn(`⚠️  YTDLP_COOKIES_PATH is set to "${COOKIES_PATH}" but that file doesn't exist.`);
+}
+
+function withCookies(opts) {
+  return COOKIES_PATH ? { ...opts, cookies: COOKIES_PATH } : opts;
+}
+
 // Prefer H.264 (avc1) video for broad player compatibility (QuickTime etc.
 // don't handle VP9/AV1), falling back to whatever's best if unavailable.
 const FORMAT_STRING =
@@ -141,6 +155,9 @@ function humanFileSize(bytes) {
 function friendlyError(err) {
   const msg = (err && err.message) || String(err);
 
+  if (/sign in to confirm you.re not a bot/i.test(msg)) {
+    return "YouTube is blocking this server's IP with a bot check. This is common on cloud hosts (Render, AWS, etc.). Set YTDLP_COOKIES_PATH to a cookies.txt exported from your own logged-in browser session to work around it.";
+  }
   if (/unsupported version of python/i.test(msg)) {
     return "The server's yt-dlp is running on an unsupported Python version. Set YTDLP_PATH to a standalone yt-dlp binary (see setup notes).";
   }
@@ -199,12 +216,15 @@ app.get("/api/info", async (req, res) => {
   }
 
   try {
-    const info = await youtubedl(url, {
-      dumpSingleJson: true,
-      noPlaylist: true,
-      noWarnings: true,
-      extractorArgs: EXTRACTOR_ARGS,
-    });
+    const info = await youtubedl(
+      url,
+      withCookies({
+        dumpSingleJson: true,
+        noPlaylist: true,
+        noWarnings: true,
+        extractorArgs: EXTRACTOR_ARGS,
+      })
+    );
 
     const audioFormats = (info.formats || []).filter(
       (f) => f.acodec && f.acodec !== "none" && (!f.vcodec || f.vcodec === "none")
@@ -252,7 +272,7 @@ app.get("/api/info", async (req, res) => {
       qualities,
     });
   } catch (err) {
-    console.error("[/api/info]", err.message);
+    console.error("[/api/info]", err.stderr || err.message);
     res.status(502).json({ error: friendlyError(err) });
   }
 });
@@ -264,12 +284,15 @@ app.get("/api/thumbnail", async (req, res) => {
   }
 
   try {
-    const info = await youtubedl(url, {
-      dumpSingleJson: true,
-      noPlaylist: true,
-      noWarnings: true,
-      extractorArgs: EXTRACTOR_ARGS,
-    });
+    const info = await youtubedl(
+      url,
+      withCookies({
+        dumpSingleJson: true,
+        noPlaylist: true,
+        noWarnings: true,
+        extractorArgs: EXTRACTOR_ARGS,
+      })
+    );
     const thumbnails = info.thumbnails || [];
     const bestThumb =
       thumbnails.length > 0
@@ -295,7 +318,7 @@ app.get("/api/thumbnail", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${safeTitle}.${ext}"`);
     res.send(buffer);
   } catch (err) {
-    console.error("[/api/thumbnail]", err.message);
+    console.error("[/api/thumbnail]", err.stderr || err.message);
     res.status(502).json({ error: friendlyError(err) });
   }
 });
@@ -347,15 +370,18 @@ app.get("/api/download", (req, res) => {
 
   send("status", { message: "Fetching video info..." });
 
-  const subprocess = youtubedl.exec(url, {
-    format: selectedFormat,
-    mergeOutputFormat: "mp4",
-    output: outputTemplate,
-    noPlaylist: true,
-    newline: true,
-    restrictFilenames: true,
-    extractorArgs: EXTRACTOR_ARGS,
-  });
+  const subprocess = youtubedl.exec(
+    url,
+    withCookies({
+      format: selectedFormat,
+      mergeOutputFormat: "mp4",
+      output: outputTemplate,
+      noPlaylist: true,
+      newline: true,
+      restrictFilenames: true,
+      extractorArgs: EXTRACTOR_ARGS,
+    })
+  );
 
   const timeoutTimer = setTimeout(() => {
     if (!finished) {
@@ -423,7 +449,7 @@ app.get("/api/download", (req, res) => {
     })
     .catch((err) => {
       if (finished) return; // already reported (e.g. timeout)
-      console.error("[/api/download]", err.message);
+      console.error("[/api/download]", err.stderr || err.message);
       cleanupJob();
       send("error", { message: friendlyError(err) });
       res.end();
